@@ -54,9 +54,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) throw error;
       
       if (data) {
+        // Get the user's email from auth.users via the session
+        const { data: sessionData } = await supabase.auth.getSession();
+        const userEmail = sessionData.session?.user?.email || '';
+        
         setUser({
           id: data.id,
-          email: data.email || '',
+          email: userEmail,
           username: data.username,
           phone: data.phone,
           avatar: data.avatar_url,
