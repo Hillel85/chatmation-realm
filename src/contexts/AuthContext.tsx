@@ -1,6 +1,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 // User type definition
 export type User = {
@@ -17,71 +18,71 @@ type AuthContextType = {
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, username: string, phone?: string) => Promise<void>;
-  signOut: () => void;
+  signOut: () => Promise<void>;
 };
 
-// Create context
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-// Mock data for demo purposes - to be replaced with Supabase
-const MOCK_USERS: User[] = [
-  {
-    id: "1",
-    email: "john@example.com",
-    username: "john_doe",
-    phone: "555-1234",
-    avatar: "https://i.pravatar.cc/150?u=john",
-  },
-  {
-    id: "2",
-    email: "jane@example.com",
-    username: "jane_doe",
-    phone: "555-5678",
-    avatar: "https://i.pravatar.cc/150?u=jane",
-  },
-];
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
-  // Check for saved session on mount
+  // Check session on mount
   useEffect(() => {
-    const savedUser = localStorage.getItem("chatUser");
-    
-    if (savedUser) {
-      try {
-        setUser(JSON.parse(savedUser));
-      } catch (error) {
-        console.error("Failed to parse saved user:", error);
-        localStorage.removeItem("chatUser");
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        // Fetch user profile data when authenticated
+        fetchProfile(session.user.id);
+      } else {
+        setUser(null);
       }
-    }
+      setIsLoading(false);
+    });
     
-    setIsLoading(false);
+    return () => subscription.unsubscribe();
   }, []);
+
+  // Fetch user profile data
+  const fetchProfile = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+        
+      if (error) throw error;
+      
+      if (data) {
+        setUser({
+          id: data.id,
+          email: data.email || '',
+          username: data.username,
+          phone: data.phone,
+          avatar: data.avatar_url,
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+      toast.error('Failed to fetch user profile');
+    }
+  };
   
   const signIn = async (email: string, password: string) => {
     setIsLoading(true);
     
     try {
-      // Simulate API delay
-      await new Promise(r => setTimeout(r, 800));
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
       
-      // Find user (this will be replaced with actual Supabase auth)
-      const foundUser = MOCK_USERS.find(u => u.email === email);
+      if (error) throw error;
       
-      if (!foundUser) {
-        throw new Error("Invalid email or password");
-      }
-      
-      // Set user in state and localStorage
-      setUser(foundUser);
-      localStorage.setItem("chatUser", JSON.stringify(foundUser));
-      
-      toast.success("Signed in successfully!");
+      toast.success('Signed in successfully!');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to sign in");
+      console.error('Sign in error:', error);
+      toast.error('Invalid email or password');
       throw error;
     } finally {
       setIsLoading(false);
@@ -92,44 +93,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true);
     
     try {
-      // Simulate API delay
-      await new Promise(r => setTimeout(r, 800));
+      // First check if username is available
+      const { data: existingUser } = await supabase
+        .from('profiles')
+        .select('username')
+        .eq('username', username)
+        .single();
       
-      // Check if email or username exists (will be replaced with Supabase)
-      if (MOCK_USERS.some(u => u.email === email)) {
-        throw new Error("Email already in use");
+      if (existingUser) {
+        throw new Error('Username already taken');
       }
       
-      if (MOCK_USERS.some(u => u.username === username)) {
-        throw new Error("Username already taken");
-      }
-      
-      // Create new user
-      const newUser: User = {
-        id: Date.now().toString(),
+      // Create auth user
+      const { error: signUpError, data } = await supabase.auth.signUp({
         email,
-        username,
-        phone,
-        avatar: `https://i.pravatar.cc/150?u=${username}`,
-      };
+        password,
+        options: {
+          data: {
+            username,
+            phone,
+          },
+        },
+      });
       
-      // Set user in state and localStorage
-      setUser(newUser);
-      localStorage.setItem("chatUser", JSON.stringify(newUser));
+      if (signUpError) throw signUpError;
       
-      toast.success("Account created successfully!");
+      toast.success('Account created successfully!');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to create account");
+      console.error('Sign up error:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to create account');
       throw error;
     } finally {
       setIsLoading(false);
     }
   };
   
-  const signOut = () => {
+  const signOut = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      toast.error('Failed to sign out');
+      return;
+    }
     setUser(null);
-    localStorage.removeItem("chatUser");
-    toast.info("Signed out");
+    toast.info('Signed out');
   };
   
   return (
