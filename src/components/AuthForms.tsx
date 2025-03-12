@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -95,7 +96,7 @@ export default function AuthForms() {
                   <FormControl>
                     <div className="relative">
                       <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                      <Input
+                      <Input 
                         placeholder="your.email@example.com"
                         className="pl-10"
                         {...field}
@@ -194,7 +195,6 @@ export default function AuthForms() {
                     <div className="relative">
                       <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                       <Input
-                        type="email"
                         placeholder="your.email@example.com"
                         className="pl-10"
                         {...field}
